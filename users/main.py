@@ -33,19 +33,29 @@ def _verify_password(password: str, hashed: str) -> bool:
     return _bcrypt.checkpw(password.encode(), hashed.encode())
 
 
+async def _read() -> list:
+    """Read without lock — caller must hold _lock."""
+    if not DATA_FILE.exists():
+        DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+        DATA_FILE.write_text("[]")
+        return []
+    return json.loads(DATA_FILE.read_text())
+
+
+async def _write(data: list) -> None:
+    """Write without lock — caller must hold _lock."""
+    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    DATA_FILE.write_text(json.dumps(data, indent=2, default=str))
+
+
 async def load() -> list:
     async with _lock:
-        if not DATA_FILE.exists():
-            DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-            DATA_FILE.write_text("[]")
-            return []
-        return json.loads(DATA_FILE.read_text())
+        return await _read()
 
 
 async def save(data: list) -> None:
     async with _lock:
-        DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-        DATA_FILE.write_text(json.dumps(data, indent=2, default=str))
+        await _write(data)
 
 
 def create_token(user_id: str, email: str, role: str) -> str:
@@ -84,19 +94,20 @@ async def health():
 
 @app.post("/users/register", status_code=201)
 async def register(body: UserCreate):
-    users = await load()
-    if any(u["email"] == body.email for u in users):
-        raise HTTPException(409, "Email already registered")
-    user = {
-        "id": str(uuid.uuid4()),
-        "name": body.name,
-        "email": body.email,
-        "password_hash": _hash_password(body.password),
-        "role": body.role,
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    users.append(user)
-    await save(users)
+    async with _lock:
+        users = await _read()
+        if any(u["email"] == body.email for u in users):
+            raise HTTPException(409, "Email already registered")
+        user = {
+            "id": str(uuid.uuid4()),
+            "name": body.name,
+            "email": body.email,
+            "password_hash": _hash_password(body.password),
+            "role": body.role,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        users.append(user)
+        await _write(users)
     return {k: v for k, v in user.items() if k != "password_hash"}
 
 

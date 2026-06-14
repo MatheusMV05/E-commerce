@@ -63,3 +63,18 @@ def test_get_user_with_valid_jwt():
     r = client.get(f"/users/{user_id}", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     assert r.json()["email"] == "carol@test.com"
+
+
+def test_get_user_not_found():
+    client.post("/users/register", json={
+        "name": "Dave", "email": "dave@test.com", "password": "pass123"
+    })
+    login = client.post("/users/login", json={"email": "dave@test.com", "password": "pass123"})
+    token = login.json()["token"]
+    r = client.get("/users/nonexistent-id", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 404
+
+
+def test_login_unknown_email():
+    r = client.post("/users/login", json={"email": "nobody@test.com", "password": "pass123"})
+    assert r.status_code == 401
