@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -72,6 +72,15 @@ class ProductCreate(BaseModel):
     stock: int
 
 
+class ProductSync(BaseModel):
+    id: str
+    name: str
+    description: str
+    price: float
+    stock: int
+    created_at: str
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -129,12 +138,12 @@ async def create_product(body: ProductCreate, _: dict = Depends(require_admin)):
 
 
 @app.post("/internal/sync", status_code=201, include_in_schema=False)
-async def internal_sync(product: dict):
+async def internal_sync(product: ProductSync):
     """Receives writes from primary. Not exposed via gateway."""
     async with _lock:
         products = await _read()
-        if not any(p["id"] == product.get("id") for p in products):
-            products.append(product)
+        if not any(p["id"] == product.id for p in products):
+            products.append(product.model_dump())
             await _write(products)
     return {"ok": True}
 
