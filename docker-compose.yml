@@ -1,0 +1,84 @@
+version: "3.9"
+
+x-jwt: &jwt
+  JWT_SECRET: super-secret-jwt-key-change-in-production-32ch
+
+services:
+  users:
+    build: ./users
+    ports:
+      - "5001:5001"
+    environment:
+      <<: *jwt
+      PORT: "5001"
+    volumes:
+      - users-data:/app/data
+
+  products_replica:
+    build: ./products_replica
+    ports:
+      - "5012:5012"
+    environment:
+      <<: *jwt
+      PORT: "5012"
+      IS_REPLICA: "true"
+    volumes:
+      - products-replica-data:/app/data
+
+  products:
+    build: ./products
+    ports:
+      - "5002:5002"
+    environment:
+      <<: *jwt
+      PORT: "5002"
+      IS_REPLICA: "false"
+      REPLICA_URL: "http://products_replica:5012"
+    volumes:
+      - products-data:/app/data
+    depends_on:
+      - products_replica
+
+  orders:
+    build: ./orders
+    ports:
+      - "5003:5003"
+    environment:
+      <<: *jwt
+      PORT: "5003"
+      PRODUCTS_URL: "http://products:5002"
+    volumes:
+      - orders-data:/app/data
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *jwt
+      PORT: "8000"
+      USERS_URL: "http://users:5001"
+      PRODUCTS_URL: "http://products:5002"
+      PRODUCTS_REPLICA_URL: "http://products_replica:5012"
+      ORDERS_URL: "http://orders:5003"
+    depends_on:
+      - users
+      - products
+      - products_replica
+      - orders
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_GATEWAY_URL: "http://localhost:8000"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - gateway
+
+volumes:
+  users-data:
+  products-data:
+  products-replica-data:
+  orders-data:
