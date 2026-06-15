@@ -74,28 +74,42 @@ export default function App() {
             <EventFeed logs={logs} />
           </div>
           <div className="md:col-span-2">
-            {status ? (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 h-full">
-                <h3 className="text-sm font-semibold text-white mb-3">System Summary</h3>
-                <div className="space-y-2">
-                  {Object.entries(status.services).map(([name, state]) => (
-                    <div key={name} className="flex justify-between items-center text-sm">
-                      <span className="text-zinc-400 capitalize">{name.replace(/_/g, ' ')}</span>
-                      <div className="flex gap-3 text-xs text-zinc-500">
-                        {state.latency_ms !== null && <span>{state.latency_ms} ms</span>}
-                        <span className={state.up ? 'text-green-400' : 'text-red-400'}>
-                          {state.up ? '● online' : '● offline'}
-                        </span>
-                      </div>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 h-full">
+              <h3 className="text-sm font-semibold text-white mb-3">Event Stats</h3>
+              {logs.length === 0 ? (
+                <p className="text-xs text-zinc-500">No events recorded yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex gap-6">
+                    <div>
+                      <p className="text-2xl font-bold text-white">{logs.length}</p>
+                      <p className="text-xs text-zinc-500">total events</p>
                     </div>
-                  ))}
+                    <div>
+                      <p className="text-2xl font-bold text-red-400">
+                        {logs.filter(l => l.status === 'DOWN').length}
+                      </p>
+                      <p className="text-xs text-zinc-500">outages</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-green-400">
+                        {logs.filter(l => l.status === 'UP' && l.note?.includes('recovered')).length}
+                      </p>
+                      <p className="text-xs text-zinc-500">recoveries</p>
+                    </div>
+                  </div>
+                  {status && (
+                    <div className="pt-3 border-t border-zinc-800">
+                      <p className="text-xs text-zinc-500 mb-2">Services currently up</p>
+                      <p className="text-sm text-white">
+                        {Object.values(status.services).filter(s => s.up).length}
+                        <span className="text-zinc-500"> / {Object.values(status.services).length}</span>
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 h-full flex items-center justify-center">
-                <p className="text-sm text-zinc-600">Connecting to gateway…</p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
