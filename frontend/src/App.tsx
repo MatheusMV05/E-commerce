@@ -2,13 +2,13 @@ import { useEffect, useState, useCallback } from 'react'
 import { fetchStatus, fetchLogs } from './lib/api'
 import type { HealthStatus, LogEntry } from './lib/api'
 import { ServiceCard } from './components/ServiceCard'
-import { EventFeed } from './components/EventFeed'
 import { LogTable } from './components/LogTable'
+import { RequestTester } from './components/RequestTester'
 
 export default function App() {
-  const [status, setStatus] = useState<HealthStatus | null>(null)
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [status, setStatus]         = useState<HealthStatus | null>(null)
+  const [logs, setLogs]             = useState<LogEntry[]>([])
+  const [error, setError]           = useState<string | null>(null)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
   const refresh = useCallback(async () => {
@@ -28,6 +28,11 @@ export default function App() {
     const id = setInterval(refresh, 3000)
     return () => clearInterval(id)
   }, [refresh])
+
+  const servicesUp   = status ? Object.values(status.services).filter(s => s.up).length : 0
+  const servicesTotal= status ? Object.values(status.services).length : 0
+  const outages      = logs.filter(l => l.status === 'DOWN').length
+  const recoveries   = logs.filter(l => l.status === 'UP' && l.note?.includes('recovered')).length
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-6">
@@ -57,7 +62,7 @@ export default function App() {
 
         {error && (
           <div className="rounded-lg border border-red-500/40 bg-red-950/20 px-4 py-3 text-sm text-red-400">
-            ⚠ {error}
+            {error}
           </div>
         )}
 
@@ -70,50 +75,44 @@ export default function App() {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-1">
-            <EventFeed logs={logs} />
-          </div>
-          <div className="md:col-span-2">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 h-full">
-              <h3 className="text-sm font-semibold text-white mb-3">Event Stats</h3>
-              {logs.length === 0 ? (
-                <p className="text-xs text-zinc-500">No events recorded yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex gap-6">
-                    <div>
-                      <p className="text-2xl font-bold text-white">{logs.length}</p>
-                      <p className="text-xs text-zinc-500">total events</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-red-400">
-                        {logs.filter(l => l.status === 'DOWN').length}
-                      </p>
-                      <p className="text-xs text-zinc-500">outages</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-green-400">
-                        {logs.filter(l => l.status === 'UP' && l.note?.includes('recovered')).length}
-                      </p>
-                      <p className="text-xs text-zinc-500">recoveries</p>
-                    </div>
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <h3 className="text-sm font-semibold text-white mb-3">Event Stats</h3>
+            {!status ? (
+              <p className="text-xs text-zinc-500">Connecting…</p>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex gap-6">
+                  <div>
+                    <p className="text-2xl font-bold text-white">{logs.length}</p>
+                    <p className="text-xs text-zinc-500">events</p>
                   </div>
-                  {status && (
-                    <div className="pt-3 border-t border-zinc-800">
-                      <p className="text-xs text-zinc-500 mb-2">Services currently up</p>
-                      <p className="text-sm text-white">
-                        {Object.values(status.services).filter(s => s.up).length}
-                        <span className="text-zinc-500"> / {Object.values(status.services).length}</span>
-                      </p>
-                    </div>
-                  )}
+                  <div>
+                    <p className="text-2xl font-bold text-red-400">{outages}</p>
+                    <p className="text-xs text-zinc-500">outages</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-green-400">{recoveries}</p>
+                    <p className="text-xs text-zinc-500">recoveries</p>
+                  </div>
                 </div>
-              )}
-            </div>
+                <div className="pt-3 border-t border-zinc-800">
+                  <p className="text-xs text-zinc-500 mb-1">Services online</p>
+                  <p className="text-sm font-medium text-white">
+                    {servicesUp}
+                    <span className="text-zinc-500"> / {servicesTotal}</span>
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="md:col-span-2">
+            <RequestTester />
           </div>
         </div>
 
         <LogTable logs={logs} />
+
       </div>
     </div>
   )
