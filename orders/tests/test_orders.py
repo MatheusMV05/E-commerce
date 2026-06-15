@@ -99,3 +99,44 @@ def test_list_orders_only_returns_own_orders(monkeypatch):
     r = client.get("/orders/user-A", headers={"Authorization": f"Bearer {token_a}"})
     assert len(r.json()) == 1
     assert r.json()[0]["user_id"] == "user-A"
+
+
+def test_list_orders_forbidden_for_other_user(monkeypatch):
+    """A user cannot read another user's orders."""
+    async def mock_get(self, url, **kw):
+        class FakeResp:
+            status_code = 200
+            def json(self): return {"id": "p1", "name": "W", "price": 5.0, "stock": 10}
+        return FakeResp()
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+    token_a = make_token("user-A")
+    token_b = make_token("user-B")
+    # user-A creates an order
+    client.post("/orders", json={"productId": "p1", "quantity": 1},
+                headers={"Authorization": f"Bearer {token_a}"})
+    # user-B tries to read user-A's orders
+    r = client.get("/orders/user-A", headers={"Authorization": f"Bearer {token_b}"})
+    assert r.status_code == 403
+
+
+def test_create_order_invalid_quantity():
+    """Quantity must be >= 1."""
+    r = client.post("/orders",
+                    json={"productId": "p1", "quantity": 0},
+                    headers={"Authorization": f"Bearer {make_token()}"})
+    assert r.status_code == 422
+
+
+def test_create_order_products_service_unreachable(monkeypatch):
+    """503 when products service is unreachable."""
+    import httpx as _httpx
+
+    async def mock_get_fail(self, url, **kw):
+        raise _httpx.RequestError("connection refused")
+
+    monkeypatch.setattr(_httpx.AsyncClient, "get", mock_get_fail)
+    r = client.post("/orders",
+                    json={"productId": "p1", "quantity": 1},
+                    headers={"Authorization": f"Bearer {make_token()}"})
+    assert r.status_code == 503

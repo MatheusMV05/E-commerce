@@ -9,7 +9,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from jose import jwt, JWTError
 from dotenv import load_dotenv
 
@@ -55,7 +55,7 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(bearer)
 
 class OrderCreate(BaseModel):
     productId: str
-    quantity: int = 1
+    quantity: int = Field(default=1, ge=1)
 
 
 @app.get("/health")
@@ -96,6 +96,8 @@ async def create_order(body: OrderCreate, current: dict = Depends(get_current_us
 
 @app.get("/orders/{user_id}")
 async def list_orders(user_id: str, current: dict = Depends(get_current_user)):
+    if current["userId"] != user_id and current.get("role") != "admin":
+        raise HTTPException(403, "Forbidden")
     orders = await load()
     return [o for o in orders if o["user_id"] == user_id]
 
