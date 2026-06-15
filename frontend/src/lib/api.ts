@@ -13,11 +13,22 @@ export interface HealthStatus {
 }
 
 export interface LogEntry {
+  kind: 'heartbeat'
   service: string
   status: string
   note: string
   timestamp: string
 }
+
+export interface RequestEntry {
+  kind: 'request'
+  method: string
+  path: string
+  status: number
+  timestamp: string
+}
+
+export type UnifiedEntry = LogEntry | RequestEntry
 
 export interface HealthLogs {
   logs: LogEntry[]

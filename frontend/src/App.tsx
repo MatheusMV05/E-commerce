@@ -1,21 +1,22 @@
 import { useEffect, useState, useCallback } from 'react'
 import { fetchStatus, fetchLogs } from './lib/api'
-import type { HealthStatus, LogEntry } from './lib/api'
+import type { HealthStatus, LogEntry, RequestEntry, UnifiedEntry } from './lib/api'
 import { ServiceCard } from './components/ServiceCard'
 import { LogTable } from './components/LogTable'
 import { RequestTester } from './components/RequestTester'
 
 export default function App() {
-  const [status, setStatus]         = useState<HealthStatus | null>(null)
-  const [logs, setLogs]             = useState<LogEntry[]>([])
-  const [error, setError]           = useState<string | null>(null)
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const [status, setStatus]           = useState<HealthStatus | null>(null)
+  const [heartbeatLogs, setHeartbeatLogs] = useState<LogEntry[]>([])
+  const [requestLogs, setRequestLogs] = useState<RequestEntry[]>([])
+  const [error, setError]             = useState<string | null>(null)
+  const [lastUpdate, setLastUpdate]   = useState<Date | null>(null)
 
   const refresh = useCallback(async () => {
     try {
       const [s, l] = await Promise.all([fetchStatus(), fetchLogs()])
       setStatus(s)
-      setLogs(l.logs)
+      setHeartbeatLogs(l.logs.map(e => ({ ...e, kind: 'heartbeat' as const })))
       setLastUpdate(new Date())
       setError(null)
     } catch {
@@ -29,10 +30,17 @@ export default function App() {
     return () => clearInterval(id)
   }, [refresh])
 
-  const servicesUp   = status ? Object.values(status.services).filter(s => s.up).length : 0
-  const servicesTotal= status ? Object.values(status.services).length : 0
-  const outages      = logs.filter(l => l.status === 'DOWN').length
-  const recoveries   = logs.filter(l => l.status === 'UP' && l.note?.includes('recovered')).length
+  const handleRequest = (entry: RequestEntry) => {
+    setRequestLogs(prev => [entry, ...prev])
+  }
+
+  const unified: UnifiedEntry[] = [...requestLogs, ...heartbeatLogs]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
+  const servicesUp    = status ? Object.values(status.services).filter(s => s.up).length : 0
+  const servicesTotal = status ? Object.values(status.services).length : 0
+  const outages       = heartbeatLogs.filter(l => l.status === 'DOWN').length
+  const recoveries    = heartbeatLogs.filter(l => l.status === 'UP' && l.note?.includes('recovered')).length
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-6">
@@ -83,7 +91,7 @@ export default function App() {
               <div className="space-y-4">
                 <div className="flex gap-6">
                   <div>
-                    <p className="text-2xl font-bold text-white">{logs.length}</p>
+                    <p className="text-2xl font-bold text-white">{unified.length}</p>
                     <p className="text-xs text-zinc-500">events</p>
                   </div>
                   <div>
@@ -107,11 +115,11 @@ export default function App() {
           </div>
 
           <div className="md:col-span-2">
-            <RequestTester />
+            <RequestTester onRequest={handleRequest} />
           </div>
         </div>
 
-        <LogTable logs={logs} />
+        <LogTable entries={unified} />
 
       </div>
     </div>
