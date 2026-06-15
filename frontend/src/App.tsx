@@ -1,122 +1,106 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useState, useCallback } from 'react'
+import { fetchStatus, fetchLogs } from './lib/api'
+import type { HealthStatus, LogEntry } from './lib/api'
+import { ServiceCard } from './components/ServiceCard'
+import { EventFeed } from './components/EventFeed'
+import { LogTable } from './components/LogTable'
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [status, setStatus] = useState<HealthStatus | null>(null)
+  const [logs, setLogs] = useState<LogEntry[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      const [s, l] = await Promise.all([fetchStatus(), fetchLogs()])
+      setStatus(s)
+      setLogs(l.logs)
+      setLastUpdate(new Date())
+      setError(null)
+    } catch {
+      setError('Cannot reach gateway at ' + ((import.meta.env.VITE_GATEWAY_URL as string) ?? 'http://localhost:8000'))
+    }
+  }, [])
+
+  useEffect(() => {
+    refresh()
+    const id = setInterval(refresh, 3000)
+    return () => clearInterval(id)
+  }, [refresh])
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="min-h-screen bg-zinc-950 text-white p-6">
+      <div className="max-w-5xl mx-auto space-y-6">
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">E-commerce Monitor</h1>
+            <p className="text-sm text-zinc-500 mt-1">
+              Microservices heartbeat dashboard — polling every 3 s
+            </p>
+          </div>
+          <div className="text-right">
+            {lastUpdate && (
+              <p className="text-xs text-zinc-500">
+                Updated {lastUpdate.toLocaleTimeString()}
+              </p>
+            )}
+            <button
+              onClick={refresh}
+              className="mt-1 text-xs text-zinc-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Refresh ↻
+            </button>
+          </div>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+        {error && (
+          <div className="rounded-lg border border-red-500/40 bg-red-950/20 px-4 py-3 text-sm text-red-400">
+            ⚠ {error}
+          </div>
+        )}
+
+        {status && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {Object.entries(status.services).map(([name, state]) => (
+              <ServiceCard key={name} name={name} state={state} />
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-1">
+            <EventFeed logs={logs} />
+          </div>
+          <div className="md:col-span-2">
+            {status ? (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 h-full">
+                <h3 className="text-sm font-semibold text-white mb-3">System Summary</h3>
+                <div className="space-y-2">
+                  {Object.entries(status.services).map(([name, state]) => (
+                    <div key={name} className="flex justify-between items-center text-sm">
+                      <span className="text-zinc-400 capitalize">{name.replace(/_/g, ' ')}</span>
+                      <div className="flex gap-3 text-xs text-zinc-500">
+                        {state.latency_ms !== null && <span>{state.latency_ms} ms</span>}
+                        <span className={state.up ? 'text-green-400' : 'text-red-400'}>
+                          {state.up ? '● online' : '● offline'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 h-full flex items-center justify-center">
+                <p className="text-sm text-zinc-600">Connecting to gateway…</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <LogTable logs={logs} />
+      </div>
+    </div>
   )
 }
-
-export default App
