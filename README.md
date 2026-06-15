@@ -44,72 +44,7 @@ Cliente (curl / Postman / Dashboard)
 - **Round-robin** — leituras de produtos alternadas entre primária e réplica
 - **Heartbeat** — verificação a cada 5 s; 2 falhas consecutivas → serviço marcado DOWN; recuperação logada
 - **503 automático** — requisições para serviços DOWN retornam `503 Service Unavailable`
-- **Dashboard** — polling a cada 3 s com cards de status, latência, feed de eventos e tabela de logs
-
----
-
-## Pré-requisitos
-
-- Docker + Docker Compose **ou** Python 3.11+ e Node.js 20+
-
----
-
-## Execução
-
-### Opção A — Docker Compose (recomendado)
-
-```bash
-docker compose up --build
-```
-
-Aguarde ~30 s. Acesse o dashboard em **http://localhost:5173** e o gateway em **http://localhost:8000**.
-
-Para encerrar: `docker compose down`  
-Para reiniciar preservando dados: `docker compose up`
-
----
-
-### Opção B — Manual (6 terminais)
-
-Copie os arquivos de configuração primeiro:
-
-```bash
-cp users/.env.example users/.env
-cp products/.env.example products/.env
-cp products_replica/.env.example products_replica/.env
-cp orders/.env.example orders/.env
-cp gateway/.env.example gateway/.env
-```
-
-**Terminal 1 — Users**
-```bash
-cd users && pip install -r requirements.txt && python main.py
-```
-
-**Terminal 2 — Products primário**
-```bash
-cd products && pip install -r requirements.txt && python main.py
-```
-
-**Terminal 3 — Products réplica**
-```bash
-cd products_replica && pip install -r requirements.txt && IS_REPLICA=true PORT=5012 python main.py
-```
-
-**Terminal 4 — Orders**
-```bash
-cd orders && pip install -r requirements.txt && python main.py
-```
-
-**Terminal 5 — Gateway**
-```bash
-cd gateway && pip install -r requirements.txt && python main.py
-```
-
-**Terminal 6 — Frontend**
-```bash
-cd frontend && npm install && npm run dev
-```
+- **Dashboard** — polling a cada 3 s com cards de status, request tester e log unificado de eventos
 
 ---
 
@@ -119,119 +54,33 @@ Todas as rotas são acessadas via o Gateway em `:8000`.
 
 ### Users
 
-| Método | Rota              | Auth  | Descrição                  |
-|--------|-------------------|-------|----------------------------|
-| POST   | /users/register   | —     | Cria usuário               |
-| POST   | /users/login      | —     | Retorna JWT                |
-| GET    | /users/{id}       | JWT   | Dados do usuário           |
-| GET    | /health           | —     | Healthcheck                |
+| Método | Rota            | Auth      | Descrição        |
+|--------|-----------------|-----------|------------------|
+| POST   | /users/register | —         | Cria usuário     |
+| POST   | /users/login    | —         | Retorna JWT      |
+| GET    | /users/{id}     | JWT       | Dados do usuário |
 
 ### Products
 
-| Método | Rota              | Auth       | Descrição                  |
-|--------|-------------------|------------|----------------------------|
-| GET    | /products         | —          | Lista produtos             |
-| GET    | /products/{id}    | —          | Detalhe do produto         |
-| POST   | /products         | JWT admin  | Cria produto               |
-| GET    | /health           | —          | Healthcheck                |
+| Método | Rota            | Auth      | Descrição        |
+|--------|-----------------|-----------|------------------|
+| GET    | /products       | —         | Lista produtos   |
+| GET    | /products/{id}  | —         | Detalhe          |
+| POST   | /products       | JWT admin | Cria produto     |
 
 ### Orders
 
-| Método | Rota              | Auth  | Descrição                  |
-|--------|-------------------|-------|----------------------------|
-| POST   | /orders           | JWT   | Cria pedido                |
-| GET    | /orders/{userId}  | JWT   | Lista pedidos do usuário   |
-| GET    | /health           | —     | Healthcheck                |
+| Método | Rota              | Auth | Descrição                |
+|--------|-------------------|------|--------------------------|
+| POST   | /orders           | JWT  | Cria pedido              |
+| GET    | /orders/{userId}  | JWT  | Lista pedidos do usuário |
 
 ### Gateway
 
-| Método | Rota              | Descrição                              |
-|--------|-------------------|----------------------------------------|
-| GET    | /health/status    | Estado atual de todos os serviços      |
-| GET    | /health/logs      | Histórico de eventos up/down           |
-
----
-
-## Sequência de teste com curl
-
-```bash
-# 1. Registrar admin
-curl -X POST http://localhost:8000/users/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Admin","email":"admin@test.com","password":"admin123","role":"admin"}'
-
-# 2. Login e salvar token
-TOKEN=$(curl -s -X POST http://localhost:8000/users/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@test.com","password":"admin123"}' \
-  | python -c "import sys,json; print(json.load(sys.stdin)['token'])")
-
-# 3. Criar produto (admin)
-curl -X POST http://localhost:8000/products \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"name":"Notebook","description":"Laptop 15 pol","price":2999.99,"stock":10}'
-
-# 4. Verificar réplica (deve ter o produto)
-curl http://localhost:5012/products
-
-# 5. Registrar usuário comum
-curl -X POST http://localhost:8000/users/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Alice","email":"alice@test.com","password":"alice123","role":"user"}'
-
-# 6. Login como Alice
-ALICE=$(curl -s -X POST http://localhost:8000/users/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"alice@test.com","password":"alice123"}')
-ALICE_TOKEN=$(echo $ALICE | python -c "import sys,json; print(json.load(sys.stdin)['token'])")
-ALICE_ID=$(echo $ALICE | python -c "import sys,json; print(json.load(sys.stdin)['userId'])")
-
-# 7. Criar pedido
-PRODUCT_ID=$(curl -s http://localhost:8000/products \
-  | python -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
-curl -X POST http://localhost:8000/orders \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $ALICE_TOKEN" \
-  -d "{\"productId\":\"$PRODUCT_ID\",\"quantity\":2}"
-
-# 8. Listar pedidos de Alice
-curl "http://localhost:8000/orders/$ALICE_ID" \
-  -H "Authorization: Bearer $ALICE_TOKEN"
-
-# 9. Status dos serviços
-curl http://localhost:8000/health/status | python -m json.tool
-```
-
----
-
-## Simulando falha (heartbeat)
-
-```bash
-# Parar o serviço de pedidos
-docker compose stop orders
-
-# Aguardar ~10 s (2 falhas × 5 s)
-# No dashboard: card Orders ficará vermelho
-# Tentar criar pedido retorna 503
-
-# Reiniciar
-docker compose start orders
-# Após ~5 s o card volta verde e o log registra "recovered"
-```
-
----
-
-## Testes unitários
-
-37 testes no total (pytest), cobrindo happy path, erros de autenticação, edge cases e rollback de replicação.
-
-```bash
-cd users   && pytest tests/ -v   # 9 testes
-cd products && pytest tests/ -v  # 11 testes
-cd orders  && pytest tests/ -v   # 10 testes
-cd gateway && pytest tests/ -v   # 7 testes
-```
+| Método | Rota           | Descrição                         |
+|--------|----------------|-----------------------------------|
+| GET    | /health/status | Estado atual de todos os serviços |
+| GET    | /health/logs   | Histórico de eventos up/down      |
 
 ---
 
@@ -246,5 +95,8 @@ E-commerce/
 ├── orders/             # Serviço de pedidos
 ├── frontend/           # Dashboard React + Tailwind CSS v4 + Vite
 ├── docker-compose.yml
-└── README.md
+├── README.md
+└── README_execucao.md  # Instruções de execução
 ```
+
+> Para executar o projeto consulte **[README_execucao.md](README_execucao.md)**.
