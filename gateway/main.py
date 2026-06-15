@@ -89,7 +89,10 @@ async def startup():
 # --- JWT helpers ---
 
 def _decode(token: str) -> dict:
-    return jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+    return jwt.decode(
+        token, JWT_SECRET, algorithms=[ALGORITHM],
+        options={"require": ["exp"]},
+    )
 
 
 def _token(request: Request) -> str | None:
@@ -110,7 +113,12 @@ _ADMIN = [("POST", "products")]
 
 
 def _is_public(method: str, path: str) -> bool:
-    return any(method == m and path.startswith(p) for m, p in _PUBLIC)
+    for m, p in _PUBLIC:
+        if method != m:
+            continue
+        if path == p or path.startswith(p + "/"):
+            return True
+    return False
 
 
 def _needs_admin(method: str, path: str) -> bool:
@@ -157,6 +165,7 @@ async def health_logs():
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy(path: str, request: Request):
     method = request.method
+    path = path.rstrip("/")
     token = _token(request)
     claims = None
 

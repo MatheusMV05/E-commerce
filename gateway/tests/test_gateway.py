@@ -57,3 +57,11 @@ def test_public_routes_do_not_require_jwt():
     r2 = client.post("/users/login", json={"email": "x", "password": "y"})
     assert r1.status_code != 401
     assert r2.status_code != 401
+
+
+def test_admin_route_trailing_slash_still_requires_admin():
+    """POST /products/ with user role must return 403, not bypass admin check."""
+    r = client.post("/products/",
+                    json={"name": "X", "description": "Y", "price": 1.0, "stock": 1},
+                    headers={"Authorization": f"Bearer {make_token('user')}"})
+    assert r.status_code == 403
